@@ -100,7 +100,7 @@
       "style": {
         "navigationBarTitleText": "游戏大厅",
         "navigationStyle": "custom",
-        "backgroundColor": "#5b3fb0"
+        "backgroundColor": "#d3e0f4"
       }
     },
     {
@@ -109,7 +109,7 @@
       "style": {
         "navigationBarTitleText": "斗地主",
         "navigationStyle": "custom",
-        "backgroundColor": "#07291a"
+        "backgroundColor": "#4a0f09"
       }
     }
   ],

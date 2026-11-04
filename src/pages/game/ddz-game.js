@@ -1,8 +1,9 @@
 /**
  * @file 斗地主牌桌 Phaser 3 场景。
  * 逻辑分辨率 750x1334，由 Scale.FIT 适配屏幕。
- * 视觉依据原版对局截图逐元素对齐：顶部信息栏、四方座位、绿绒金沿牌桌、
- * 蓝色牌数徽章、大牌面手牌、底部常驻操作条。
+ * 视觉依据宁波地主实机对局截图逐元素对齐：
+ * 酒红木质外框与四角雕花、金黄绒布圆角桌面、顶部地主牌红框、
+ * 红青双色分数大字、青绿“不出”印章、叶形牌型标签、大牌面手牌。
  */
 
 import {
@@ -15,23 +16,42 @@ import {
   drawAvatar,
   drawButton,
   drawCountBadge,
-  drawFeltGradient,
+  drawFeltRect,
   drawBean,
-  formatMoney
+  drawScoreText,
+  drawStamp,
+  drawPatternTag,
+  drawWoodFrame,
+  drawCornerTrim,
+  formatMoney,
+  css
 } from './ddz-theme.js'
 
 /** 座位布局：索引 0 为自己（左下），1 为右对手，2 为左对手 */
 const SEAT_POS = [
-  { x: 96, y: 1008 },
-  { x: 642, y: 330 },
-  { x: 108, y: 330 }
+  { x: 106, y: 892 },
+  { x: 644, y: 318 },
+  { x: 106, y: 318 }
+]
+
+/** 座位对应的本局分数显示位置 */
+const SCORE_POS = [
+  { x: 268, y: 892 },
+  { x: 482, y: 318 },
+  { x: 268, y: 318 }
 ]
 
 /** 自己手牌基线 y */
-const HAND_Y = 1152
+const HAND_Y = 1148
 
-/** 牌桌椭圆中心与半径 */
-const TABLE = { cx: 375, cy: 742, rw: 458, rh: 322 }
+/** 绒布桌面矩形 */
+const TABLE = { x: 30, y: 172, w: 690, h: 800, radius: 44 }
+
+/** 出牌区中心 */
+const PLATE = { x: 375, y: 640 }
+
+/** 操作按钮基线 y */
+const ACTION_Y = 1032
 
 /**
  * 创建牌桌场景类
@@ -45,7 +65,6 @@ export default function createDdzScene(Phaser, hooks)
     constructor()
     {
       super({ key: 'DdzScene' })
-      this.cardNodes = []
       this.handNodes = []
       this.selected = new Set()
       this.state = null
@@ -61,7 +80,7 @@ export default function createDdzScene(Phaser, hooks)
     {
       this.drawTable()
       this.buildTopBar()
-      this.buildActivityBar()
+      this.buildSideInfo()
       this.buildSeats()
       this.buildCenter()
       this.buildHandArea()
@@ -76,184 +95,185 @@ export default function createDdzScene(Phaser, hooks)
     }
 
     /**
-     * 绘制牌桌：深绿底 + 木质外框 + 金色桌沿 + 绒布径向渐变 + 中央暗纹
+     * 绘制牌桌：酒红木框 + 金黄绒布圆角桌面 + 四角雕花 + 云纹暗花
      * @returns {void}
      */
     drawTable()
     {
-      const g = this.add.graphics()
-      g.fillStyle(0x07291a, 1)
-      g.fillRect(0, 0, W, H)
-      g.fillStyle(COLOR.feltOuter, 1)
-      g.fillRect(0, 0, W, H)
+      drawWoodFrame(this)
+      drawCornerTrim(this, 56)
+      drawFeltRect(this, TABLE)
 
-      const shade = this.add.graphics()
-      shade.fillStyle(0x000000, 0.18)
-      shade.fillRect(0, 0, W, 120)
-      shade.fillStyle(0x000000, 0.22)
-      shade.fillRect(0, H - 140, W, 140)
+      const deco = this.add.graphics()
+      deco.lineStyle(2, 0xfff0c4, 0.18)
+      deco.strokeRoundedRect(TABLE.x + 34, TABLE.y + 34, TABLE.w - 68, TABLE.h - 68, 28)
+      deco.lineStyle(1.5, 0xfff0c4, 0.12)
+      deco.strokeRoundedRect(TABLE.x + 46, TABLE.y + 46, TABLE.w - 92, TABLE.h - 92, 24)
 
-      const rail = this.add.graphics()
-      rail.lineStyle(30, COLOR.railDark, 1)
-      rail.strokeEllipse(TABLE.cx, TABLE.cy, TABLE.rw * 2 + 30, TABLE.rh * 2 + 30)
-      rail.lineStyle(12, COLOR.railLight, 1)
-      rail.strokeEllipse(TABLE.cx, TABLE.cy, TABLE.rw * 2 + 22, TABLE.rh * 2 + 22)
-      rail.lineStyle(3, 0x6b4312, 0.8)
-      rail.strokeEllipse(TABLE.cx, TABLE.cy, TABLE.rw * 2 + 8, TABLE.rh * 2 + 8)
-
-      drawFeltGradient(this, TABLE.cx, TABLE.cy, TABLE.rw, TABLE.rh, COLOR.feltLight, 20)
-      const ring = this.add.graphics()
-      ring.lineStyle(2, 0x0a3f27, 0.55)
-      for (let i = 1; i <= 3; i += 1)
-      {
-        ring.strokeEllipse(
-          TABLE.cx,
-          TABLE.cy,
-          TABLE.rw * 2 * (1 - i * 0.18),
-          TABLE.rh * 2 * (1 - i * 0.18)
-        )
-      }
-
-      const mark = this.add
-        .text(TABLE.cx, TABLE.cy + 138, '欢乐斗地主', {
-          fontFamily: 'sans-serif',
-          fontSize: '62px',
-          color: '#ffffff',
-          fontStyle: 'bold'
-        })
-        .setOrigin(0.5)
-        .setAlpha(0.045)
-        .setAngle(-4)
-      mark.setDepth(1)
     }
 
     /**
-     * 顶部信息栏：返回、房间号与时间、底分牌、任务与更多
+     * 顶部木条：地主牌框居中，左侧礼盒与表情，右侧房间号与设置退出
      * @returns {void}
      */
     buildTopBar()
     {
       const g = this.add.graphics()
-      g.fillStyle(COLOR.barBg, 0.94)
-      g.fillRect(0, 0, W, 92)
-      g.lineStyle(2, 0xd8ae4e, 0.5)
-      g.lineBetween(0, 92, W, 92)
+      g.fillStyle(0x5e1809, 1)
+      g.fillRect(0, 0, W, 104)
+      g.fillStyle(COLOR.barBg, 1)
+      g.fillRect(0, 0, W, 98)
+      g.fillStyle(0x8a2c14, 1)
+      g.fillRect(0, 0, W, 46)
+      g.fillStyle(0xffffff, 0.08)
+      g.fillRect(0, 0, W, 12)
+      g.lineStyle(3, COLOR.woodTrim, 0.9)
+      g.lineBetween(0, 98, W, 98)
+      g.lineStyle(1.5, 0x3a0c06, 0.6)
+      g.lineBetween(0, 102, W, 102)
 
-      const back = this.add.container(48, 46)
-      const bg = this.add.graphics()
-      bg.fillStyle(0x000000, 0.4)
-      bg.fillRoundedRect(-28, -28, 56, 56, 12)
-      bg.lineStyle(2, 0xd8ae4e, 0.7)
-      bg.strokeRoundedRect(-28, -28, 56, 56, 12)
-      const arrow = this.add
-        .text(0, 0, '‹', { fontFamily: 'sans-serif', fontSize: '46px', color: '#ffe9a8' })
-        .setOrigin(0.5)
-      back.add([bg, arrow])
-      back.setSize(56, 56)
-      back.setInteractive({ useHandCursor: true })
-      back.on('pointerdown', () =>
+      this.buildIconButton(42, 52, 'gift', () => this.toast('每日礼包待领取'))
+      this.buildIconButton(102, 52, 'smile', () => this.toggleChat())
+
+      this.roomText = this.add
+        .text(148, 34, '经典场 · 1/3', {
+          fontFamily: 'sans-serif',
+          fontSize: '23px',
+          color: '#ffe9c4',
+          fontStyle: 'bold'
+        })
+        .setOrigin(0, 0.5)
+      this.roomText.setShadow(0, 2, '#3a0c06', 2)
+      this.baseText = this.add
+        .text(148, 70, '底分 0', {
+          fontFamily: 'sans-serif',
+          fontSize: '21px',
+          color: '#ffcf8a'
+        })
+        .setOrigin(0, 0.5)
+
+      const frame = this.add.graphics()
+      frame.fillStyle(0x3a0c06, 0.9)
+      frame.fillRoundedRect(298, 10, 154, 78, 12)
+      frame.fillStyle(0x9c2a12, 1)
+      frame.fillRoundedRect(302, 14, 146, 70, 10)
+      frame.lineStyle(2.5, COLOR.woodTrim, 1)
+      frame.strokeRoundedRect(302, 14, 146, 70, 10)
+      frame.lineStyle(1.5, 0xfff0c4, 0.35)
+      frame.strokeRoundedRect(308, 20, 134, 58, 8)
+
+      this.bottomSlot = this.add.container(375, 49)
+
+      this.buildIconButton(652, 52, 'gear', () => this.toast('设置'))
+      this.buildIconButton(712, 52, 'door', () =>
       {
         if (hooks.onAction)
         {
           hooks.onAction('quit', [])
         }
       })
-
-      this.roomText = this.add.text(96, 22, '经典场 · 1/3', {
-        fontFamily: 'sans-serif',
-        fontSize: '24px',
-        color: '#e9f3ec'
-      })
-      this.clockText = this.add.text(96, 54, '--:--', {
-        fontFamily: 'sans-serif',
-        fontSize: '22px',
-        color: '#9fc4ad'
-      })
-
-      const baseCard = this.add.container(W / 2, 46)
-      const cg = this.add.graphics()
-      cg.fillStyle(0xffffff, 1)
-      cg.fillRoundedRect(-34, -30, 68, 60, 8)
-      cg.lineStyle(2, 0xd8ae4e, 1)
-      cg.strokeRoundedRect(-34, -30, 68, 60, 8)
-      this.baseText = this.add
-        .text(0, -2, '0', {
-          fontFamily: 'Arial Black, Arial, sans-serif',
-          fontSize: '26px',
-          color: '#c0392b',
-          fontStyle: 'bold'
-        })
-        .setOrigin(0.5)
-      const baseTag = this.add
-        .text(0, 20, '底分', { fontFamily: 'sans-serif', fontSize: '16px', color: '#8a6a2a' })
-        .setOrigin(0.5)
-      baseCard.add([cg, this.baseText, baseTag])
-
-      this.buildTopIcon(628, 46, '任务', () => this.toast('任务中心开放中'))
-      this.buildTopIcon(700, 46, '更多', () => this.toast('更多设置'))
     }
 
     /**
-     * 顶栏右侧图标按钮
-     * @param {number} x 位置 x
-     * @param {number} y 位置 y
-     * @param {string} text 文案
+     * 顶部与底部的圆形图标按钮，图标用矢量几何绘制
+     * @param {number} x 中心 x
+     * @param {number} y 中心 y
+     * @param {string} kind 图标类型 gift/smile/gear/door
      * @param {Function} onClick 点击回调
      * @returns {void}
      */
-    buildTopIcon(x, y, text, onClick)
+    buildIconButton(x, y, kind, onClick)
     {
       const box = this.add.container(x, y)
       const g = this.add.graphics()
-      g.fillStyle(0x1c4a33, 1)
-      g.fillRoundedRect(-30, -24, 60, 48, 12)
-      g.lineStyle(1.5, 0xd8ae4e, 0.6)
-      g.strokeRoundedRect(-30, -24, 60, 48, 12)
-      const t = this.add
-        .text(0, 0, text, { fontFamily: 'sans-serif', fontSize: '20px', color: '#ffe9a8' })
-        .setOrigin(0.5)
-      box.add([g, t])
-      box.setSize(60, 48)
+      g.fillStyle(0x3a0c06, 0.55)
+      g.fillCircle(0, 2, 26)
+      g.fillStyle(0xc8873a, 1)
+      g.fillCircle(0, 0, 25)
+      g.fillStyle(0xeab05c, 1)
+      g.fillCircle(0, -2, 22)
+      g.lineStyle(2, 0xfff0c4, 0.7)
+      g.strokeCircle(0, 0, 25)
+
+      const ic = this.add.graphics()
+      ic.lineStyle(3, 0x6b3a10, 1)
+      ic.fillStyle(0x6b3a10, 1)
+      if (kind === 'gift')
+      {
+        ic.fillRoundedRect(-13, -4, 26, 16, 3)
+        ic.fillRect(-15, -10, 30, 7)
+        ic.fillRect(-2, -10, 4, 22)
+        ic.lineStyle(0, 0, 0)
+        ic.beginPath()
+        ic.arc(-7, -13, 6, Math.PI, Math.PI * 2, false)
+        ic.strokePath()
+        ic.beginPath()
+        ic.arc(7, -13, 6, Math.PI, Math.PI * 2, false)
+        ic.strokePath()
+      }
+      else if (kind === 'smile')
+      {
+        ic.strokeCircle(0, 0, 14)
+        ic.fillCircle(-5, -4, 2.4)
+        ic.fillCircle(5, -4, 2.4)
+        ic.beginPath()
+        ic.arc(0, 1, 8, Math.PI * 0.15, Math.PI * 0.85, false)
+        ic.strokePath()
+      }
+      else if (kind === 'gear')
+      {
+        ic.strokeCircle(0, 0, 12)
+        ic.strokeCircle(0, 0, 4)
+        for (let i = 0; i < 8; i += 1)
+        {
+          const a = (Math.PI / 4) * i
+          ic.lineBetween(Math.cos(a) * 12, Math.sin(a) * 12, Math.cos(a) * 16, Math.sin(a) * 16)
+        }
+      }
+      else
+      {
+        ic.lineBetween(-12, -13, -12, 13)
+        ic.lineBetween(12, -13, 12, 13)
+        ic.lineBetween(-12, -13, 12, -13)
+        ic.fillCircle(7, 2, 2.6)
+      }
+      box.add([g, ic])
+      box.setSize(52, 52)
       box.setInteractive({ useHandCursor: true })
       box.on('pointerdown', onClick)
     }
 
     /**
-     * 顶部活动横幅，文案取自原版活动条
+     * 右侧常驻信息：时间、胜局、对局，取自实机右侧信息列
      * @returns {void}
      */
-    buildActivityBar()
+    buildSideInfo()
     {
-      const box = this.add.container(20, 108)
-      const g = this.add.graphics()
-      g.fillStyle(0x000000, 0.34)
-      g.fillRoundedRect(0, 0, 396, 40, 20)
-      g.lineStyle(1, 0xffe9a8, 0.28)
-      g.strokeRoundedRect(0, 0, 396, 40, 20)
-      const tag = this.add
-        .text(10, 20, '活动', {
+      this.clockText = this.add
+        .text(714, 792, '--:--', {
           fontFamily: 'sans-serif',
-          fontSize: '18px',
-          color: '#3a2a05',
-          backgroundColor: '#ffd45e',
-          padding: { x: 8, y: 2 }
+          fontSize: '26px',
+          color: '#9a5a18'
         })
-        .setOrigin(0, 0.5)
-      const txt = this.add
-        .text(72, 20, '该不该约束？点我看看就知道', {
+        .setOrigin(1, 0.5)
+      this.winText = this.add
+        .text(714, 838, '胜局 0/0', {
           fontFamily: 'sans-serif',
-          fontSize: '20px',
-          color: '#ffffff'
+          fontSize: '22px',
+          color: '#b07a34'
         })
-        .setOrigin(0, 0.5)
-      box.add([g, tag, txt])
-      box.setSize(396, 40)
-      box.setInteractive({ useHandCursor: true })
-      box.on('pointerdown', () => this.toast('活动详情'))
+        .setOrigin(1, 0.5)
+      this.roundText = this.add
+        .text(714, 872, '对局 0/0', {
+          fontFamily: 'sans-serif',
+          fontSize: '22px',
+          color: '#b07a34'
+        })
+        .setOrigin(1, 0.5)
     }
 
     /**
-     * 构建三个座位节点
+     * 构建三个座位节点：卡通头像 + 昵称 + 欢乐豆 + 牌数徽章 + 分数大字 + 印章
      * @returns {void}
      */
     buildSeats()
@@ -262,37 +282,36 @@ export default function createDdzScene(Phaser, hooks)
       SEAT_POS.forEach((pos, i) =>
       {
         const box = this.add.container(pos.x, pos.y)
-        const ringColor = i === 0 ? 0xffd45e : 0x63e6ff
-        const avatar = drawAvatar(this, 0, 0, 44, '', ringColor)
+        const avatar = drawAvatar(this, 0, 0, 46, '', i)
         const nameText = this.add
-          .text(0, 54, '', {
+          .text(0, 60, '', {
             fontFamily: 'sans-serif',
             fontSize: '22px',
-            color: '#eaf6ee'
+            color: '#5a2c08',
+            fontStyle: 'bold'
           })
           .setOrigin(0.5, 0)
-          .setShadow(0, 1, '#000000aa', 2)
-        const coinIcon = this.add.container(-8, 88)
+        const coinIcon = this.add.container(0, 90)
         const coinBg = this.add.graphics()
-        coinBg.fillStyle(0x000000, 0.35)
-        coinBg.fillRoundedRect(-78, -14, 168, 28, 14)
+        coinBg.fillStyle(0x7a3c0a, 0.14)
+        coinBg.fillRoundedRect(-48, -12, 96, 24, 12)
         coinIcon.add(coinBg)
-        const bean = drawBean(this, -58, 0, 22)
+        const bean = drawBean(this, -34, 0, 18)
         const coinText = this.add
-          .text(-46, 0, '0', { fontFamily: 'sans-serif', fontSize: '21px', color: '#ffe9a8' })
+          .text(-22, 0, '0', { fontFamily: 'sans-serif', fontSize: '18px', color: '#6b3a10' })
           .setOrigin(0, 0.5)
         coinIcon.add([bean, coinText])
 
-        const lordTag = this.add.container(0, -62)
+        const lordTag = this.add.container(0, -58)
         const lg = this.add.graphics()
         lg.fillStyle(0xd8352a, 1)
-        lg.fillRoundedRect(-34, -15, 68, 30, 8)
-        lg.lineStyle(2, 0xffd45e, 1)
-        lg.strokeRoundedRect(-34, -15, 68, 30, 8)
+        lg.fillRoundedRect(-33, -14, 66, 28, 8)
+        lg.lineStyle(2, 0xffe9a8, 1)
+        lg.strokeRoundedRect(-33, -14, 66, 28, 8)
         const lt = this.add
           .text(0, 0, '地主', {
             fontFamily: 'sans-serif',
-            fontSize: '19px',
+            fontSize: '18px',
             color: '#ffe9a8',
             fontStyle: 'bold'
           })
@@ -300,74 +319,65 @@ export default function createDdzScene(Phaser, hooks)
         lordTag.add([lg, lt])
         lordTag.setVisible(false)
 
-        const badge = drawCountBadge(this, 62, -34, 27)
-        const passBox = this.add.container(0, -96)
-        const pb = this.add.graphics()
-        pb.fillStyle(0x000000, 0.42)
-        pb.fillRoundedRect(-46, -24, 92, 48, 12)
-        pb.lineStyle(2, 0xffd45e, 0.85)
-        pb.strokeRoundedRect(-46, -24, 92, 48, 12)
-        const passText = this.add
-          .text(0, 0, '不出', {
-            fontFamily: 'sans-serif',
-            fontSize: '26px',
-            color: '#ffe08a',
-            fontStyle: 'bold'
-          })
-          .setOrigin(0.5)
-          .setShadow(0, 2, '#00000099', 3)
-        passBox.add([pb, passText])
-        passBox.setAlpha(0)
-
+        const badge = drawCountBadge(this, 56, -34, 26)
         if (i === 0)
         {
-          nameText.setPosition(56, 6).setOrigin(0, 0.5)
+          nameText.setVisible(false)
           coinIcon.setVisible(false)
+          badge.setPosition(60, -32)
         }
-        box.add([avatar, nameText, coinIcon, lordTag, badge, passBox])
-        this.seatNodes.push({ box, avatar, nameText, coinText, lordTag, badge, passBox })
+        box.add([avatar, nameText, coinIcon, lordTag, badge])
+        this.seatNodes.push({ box, avatar, nameText, coinText, lordTag, badge, role: i })
+      })
+
+      this.scoreNodes = SCORE_POS.map((p) =>
+      {
+        const t = drawScoreText(this, p.x, p.y, '', COLOR.scoreUp, 46)
+        t.setAlpha(0)
+        return t
+      })
+
+      this.stampNodes = SCORE_POS.map((p, i) =>
+      {
+        const sy = i === 0 ? p.y - 90 : p.y + 86
+        const s = drawStamp(this, p.x, sy, '不出')
+        s.setAlpha(0)
+        return s
       })
     }
 
     /**
-     * 中央区域：底牌展示、上一手牌、牌型文字、炸弹特效层
+     * 中央区域：上一手牌、牌型标签、炸弹特效层
      * @returns {void}
      */
     buildCenter()
     {
-      this.bottomSlot = this.add.container(W / 2, 208)
-      this.playSlot = this.add.container(W / 2, TABLE.cy - 76)
-      this.playLabel = this.add
-        .text(W / 2, TABLE.cy + 44, '', {
-          fontFamily: 'sans-serif',
-          fontSize: '26px',
-          color: '#ffe9a8',
-          fontStyle: 'bold'
-        })
-        .setOrigin(0.5)
-        .setShadow(0, 2, '#000000aa', 3)
-      this.effectLayer = this.add.container(W / 2, TABLE.cy - 108)
+      this.playSlot = this.add.container(PLATE.x, PLATE.y)
+      this.patternSlot = this.add.container(PLATE.x, PLATE.y + 96)
+      this.effectLayer = this.add.container(PLATE.x, PLATE.y - 20)
     }
 
     /**
-     * 手牌区容器
+     * 手牌区容器：底部深色托底 + 选中提示
      * @returns {void}
      */
     buildHandArea()
     {
       const tray = this.add.graphics()
-      tray.fillStyle(0x02150d, 0.42)
-      tray.fillRect(0, HAND_Y - CARD_H / 2 - 26, W, CARD_H / 2 + 60)
-      tray.fillStyle(0x000000, 0.18)
-      tray.fillRect(0, HAND_Y - CARD_H / 2 - 26, W, 10)
+      tray.fillStyle(0x3a0c06, 0.55)
+      tray.fillRect(0, HAND_Y - CARD_H / 2 - 30, W, CARD_H / 2 + 66)
+      tray.fillStyle(COLOR.woodTrim, 0.45)
+      tray.fillRect(0, HAND_Y - CARD_H / 2 - 30, W, 3)
       this.handContainer = this.add.container(0, 0)
       this.selectedLabel = this.add
-        .text(146, 1004, '', {
+        .text(150, 1002, '', {
           fontFamily: 'sans-serif',
           fontSize: '24px',
-          color: '#ffd45e'
+          color: '#fff0c4',
+          fontStyle: 'bold'
         })
         .setOrigin(0.5)
+      this.selectedLabel.setShadow(0, 2, '#3a0c06', 3)
     }
 
     /**
@@ -381,7 +391,7 @@ export default function createDdzScene(Phaser, hooks)
       {
         const btn = drawButton(this, {
           x,
-          y: 1042,
+          y: ACTION_Y,
           w: w || 118,
           h: 66,
           text,
@@ -398,60 +408,64 @@ export default function createDdzScene(Phaser, hooks)
         })
         this.buttons[key] = btn
       }
-      mk('hint', '提示', 404, COLOR.btnSecondary)
-      mk('pass', '不出', 532, COLOR.btnSecondary)
+      mk('hint', '提示', 404, COLOR.btnSecondary, 116)
+      mk('pass', '不出', 532, COLOR.btnSecondary, 116)
       mk('play', '出牌', 664, COLOR.btnPrimary, 124)
       this.setButtonsEnabled(false)
     }
 
     /**
-     * 底部常驻条：切换形象、欢乐豆、底分、托管、聊天
+     * 底部常驻条：倍数、欢乐豆、切换形象、托管、聊天
      * @returns {void}
      */
     buildBottomBar()
     {
       const g = this.add.graphics()
-      g.fillStyle(0x0a2417, 0.96)
-      g.fillRect(0, H - 98, W, 98)
-      g.lineStyle(2, 0xd8ae4e, 0.45)
-      g.lineBetween(0, H - 98, W, H - 98)
+      g.fillStyle(0x4a0f09, 1)
+      g.fillRect(0, H - 92, W, 92)
+      g.fillStyle(COLOR.barBg, 1)
+      g.fillRect(0, H - 88, W, 88)
+      g.lineStyle(3, COLOR.woodTrim, 0.9)
+      g.lineBetween(0, H - 92, W, H - 92)
 
-      const swap = drawButton(this, {
-        x: 92,
-        y: H - 50,
-        w: 156,
-        h: 54,
-        text: '切换形象',
-        fill: COLOR.btnPurple,
-        fontSize: 24
-      })
-      swap.on('pointerdown', () => this.toast('形象切换开放中'))
-
-      drawBean(this, 198, H - 50, 26)
-      this.beanText = this.add
-        .text(214, H - 50, '0', {
+      this.multiText = this.add
+        .text(40, H - 44, '倍数 x1', {
           fontFamily: 'sans-serif',
-          fontSize: '24px',
-          color: '#ffe9a8'
+          fontSize: '25px',
+          color: '#ffe9a8',
+          fontStyle: 'bold'
+        })
+        .setOrigin(0, 0.5)
+      this.multiText.setShadow(0, 2, '#3a0c06', 3)
+
+      drawBean(this, 164, H - 44, 24)
+      this.beanText = this.add
+        .text(180, H - 44, '0', {
+          fontFamily: 'sans-serif',
+          fontSize: '23px',
+          color: '#ffd9a0'
         })
         .setOrigin(0, 0.5)
 
-      this.multiText = this.add
-        .text(452, H - 50, '倍数 x1', {
-          fontFamily: 'sans-serif',
-          fontSize: '24px',
-          color: '#ffd45e'
-        })
-        .setOrigin(0.5)
+      const swap = drawButton(this, {
+        x: 412,
+        y: H - 44,
+        w: 136,
+        h: 56,
+        text: '切换形象',
+        fill: COLOR.btnPurple,
+        fontSize: 23
+      })
+      swap.on('pointerdown', () => this.toast('形象切换开放中'))
 
       const auto = drawButton(this, {
-        x: 576,
-        y: H - 50,
-        w: 104,
-        h: 54,
+        x: 552,
+        y: H - 44,
+        w: 108,
+        h: 56,
         text: '托管',
-        fill: 0x4a5f52,
-        fontSize: 24
+        fill: COLOR.btnMuted,
+        fontSize: 23
       })
       auto.on('pointerdown', () =>
       {
@@ -463,13 +477,13 @@ export default function createDdzScene(Phaser, hooks)
       this.autoButton = auto
 
       const chat = drawButton(this, {
-        x: 692,
-        y: H - 50,
-        w: 96,
-        h: 54,
+        x: 664,
+        y: H - 44,
+        w: 84,
+        h: 56,
         text: '聊天',
         fill: COLOR.btnChat,
-        fontSize: 24
+        fontSize: 23
       })
       chat.on('pointerdown', () => this.toggleChat())
     }
@@ -482,26 +496,29 @@ export default function createDdzScene(Phaser, hooks)
     {
       this.chatPanel = this.add.container(W / 2, H / 2).setDepth(60).setVisible(false)
       const mask = this.add
-        .rectangle(0, 0, W, H, 0x000000, 0.55)
+        .rectangle(0, 0, W, H, 0x000000, 0.58)
         .setInteractive()
         .on('pointerdown', () => this.toggleChat())
       this.chatPanel.add(mask)
 
       const g = this.add.graphics()
-      g.fillStyle(0x14301f, 1)
-      g.fillRoundedRect(-320, -300, 640, 600, 20)
-      g.lineStyle(3, 0xd8ae4e, 0.85)
-      g.strokeRoundedRect(-320, -300, 640, 600, 20)
+      g.fillStyle(0x4a0f09, 1)
+      g.fillRoundedRect(-318, -262, 636, 524, 20)
+      g.fillStyle(0x74220f, 1)
+      g.fillRoundedRect(-312, -256, 624, 512, 16)
+      g.lineStyle(3, COLOR.woodTrim, 0.95)
+      g.strokeRoundedRect(-312, -256, 624, 512, 16)
       this.chatPanel.add(g)
 
       const title = this.add
-        .text(0, -262, '快捷语音', {
+        .text(0, -220, '快捷语音', {
           fontFamily: 'sans-serif',
           fontSize: '28px',
-          color: '#ffd45e',
+          color: '#ffe9a8',
           fontStyle: 'bold'
         })
         .setOrigin(0.5)
+      title.setShadow(0, 2, '#3a0c06', 3)
       this.chatPanel.add(title)
 
       const phrases = [
@@ -519,16 +536,16 @@ export default function createDdzScene(Phaser, hooks)
       {
         const row = Math.floor(i / 2)
         const col = i % 2
-        const w = 292
         const x = i === 8 ? 0 : (col === 0 ? -152 : 152)
-        const y = -196 + row * 84
+        const y = -172 + row * 84
         const btn = drawButton(this, {
           x,
           y,
-          w,
+          w: 292,
           h: 62,
           text: p,
-          fill: 0x25543a,
+          fill: 0xb8792a,
+          fillDeep: 0x7a4a10,
           fontSize: p.length > 7 ? 20 : 24
         })
         btn.on('pointerdown', () =>
@@ -577,22 +594,21 @@ export default function createDdzScene(Phaser, hooks)
     bubble(text, seatIdx)
     {
       const pos = SEAT_POS[seatIdx] || SEAT_POS[0]
-      const dir = seatIdx === 1 ? -1 : 1
-      const box = this.add.container(pos.x + dir * 96, pos.y - 96).setDepth(50)
+      const dir = seatIdx === 0 ? 1 : (seatIdx === 1 ? -1 : 1)
+      const box = this.add.container(pos.x + dir * 110, pos.y - 100).setDepth(50)
       const label = this.add
         .text(0, 0, text, {
           fontFamily: 'sans-serif',
           fontSize: '22px',
-          color: '#3a2a05'
+          color: '#5a2c08'
         })
         .setOrigin(0.5)
       const w = Math.max(120, label.width + 36)
       const bg = this.add.graphics()
       bg.fillStyle(0xfff4d0, 1)
       bg.fillRoundedRect(-w / 2, -26, w, 52, 16)
-      bg.lineStyle(2, 0xd8ae4e, 1)
+      bg.lineStyle(2, 0xd8a13a, 1)
       bg.strokeRoundedRect(-w / 2, -26, w, 52, 16)
-      label.setPosition(0, 0)
       box.add([bg, label])
       this.tweens.add({
         targets: box,
@@ -640,7 +656,7 @@ export default function createDdzScene(Phaser, hooks)
      */
     setButtonsEnabled(enabled)
     {
-      ['hint', 'pass', 'play'].forEach((k) =>
+      Object.keys(this.buttons).forEach((k) =>
       {
         const btn = this.buttons[k]
         if (btn && btn.setEnabled)
@@ -659,13 +675,13 @@ export default function createDdzScene(Phaser, hooks)
     {
       const layout = {
         1: [
-          { key: 'bid0', text: '不叫', fill: 0x4a5f52 },
+          { key: 'bid0', text: '不叫', fill: COLOR.btnMuted },
           { key: 'bid1', text: '1分', fill: COLOR.btnSecondary },
           { key: 'bid2', text: '2分', fill: COLOR.btnSecondary },
           { key: 'bid3', text: '3分', fill: COLOR.btnPrimary }
         ],
         2: [
-          { key: 'nodouble', text: '不加倍', fill: 0x4a5f52 },
+          { key: 'nodouble', text: '不加倍', fill: COLOR.btnMuted },
           { key: 'double', text: '加倍', fill: COLOR.btnPrimary }
         ],
         3: [
@@ -690,7 +706,7 @@ export default function createDdzScene(Phaser, hooks)
       })
       this.buttons = {}
       const n = seq.length
-      const w = n >= 4 ? 104 : n === 3 ? 118 : 140
+      const w = n >= 4 ? 104 : n === 3 ? 116 : 140
       const gap = 10
       const total = n * w + (n - 1) * gap
       const start = 718 - total + w / 2
@@ -698,7 +714,7 @@ export default function createDdzScene(Phaser, hooks)
       {
         const btn = drawButton(this, {
           x: start + i * (w + gap),
-          y: 1042,
+          y: ACTION_Y,
           w,
           h: 66,
           text: s.text,
@@ -726,9 +742,13 @@ export default function createDdzScene(Phaser, hooks)
     renderState(state)
     {
       this.state = state
-      this.baseText.setText(String(state.base_score || 0))
+      this.baseText.setText('底分 ' + (state.base_score || 0))
       this.multiText.setText('倍数 x' + (state.multiplier || 1))
       this.beanText.setText(formatMoney(state.my_coin || 0))
+      if (typeof state.room_name === 'string' && state.room_name)
+      {
+        this.roomText.setText(state.room_name)
+      }
       this.renderSeats(state)
       this.renderBottom(state)
       this.renderPlayed(state)
@@ -752,13 +772,17 @@ export default function createDdzScene(Phaser, hooks)
     }
 
     /**
-     * 刷新座位信息
+     * 刷新座位信息与实时分数
      * @param {Object} state 状态快照
      * @returns {void}
      */
     renderSeats(state)
     {
       const players = state.players || []
+      const lastCards = state.last_cards || []
+      const passedSeat = lastCards.length === 0 && typeof state.last_seat === 'number'
+        ? state.last_seat
+        : -1
       players.forEach((p) =>
       {
         const idx = p.seat
@@ -769,21 +793,41 @@ export default function createDdzScene(Phaser, hooks)
         const node = this.seatNodes[idx]
         node.nameText.setText(p.nickname || '座位' + p.seat)
         node.avatar.setLabel(p.nickname || '玩家')
-        node.coinText.setText(formatMoney(p.coin || p.score || 0))
+        node.coinText.setText(formatMoney(p.bid_score ? p.bid_score * 100 : 0))
         node.lordTag.setVisible(Boolean(p.is_landlord))
         node.badge.setVisible(true)
         node.badge.setText(p.card_count || 0)
-        node.passBox.setAlpha(p.passed ? 1 : 0)
+
+        const scoreNode = this.scoreNodes[idx]
+        const val = Number(p.score || 0)
+        if (val === 0)
+        {
+          scoreNode.setAlpha(0)
+        }
+        else
+        {
+          scoreNode
+            .setText((val > 0 ? '+' : '') + val)
+            .setColor(css(val > 0 ? COLOR.scoreUp : COLOR.scoreGold))
+            .setAlpha(1)
+        }
+        const showStamp = state.phase_code === 3 && passedSeat === idx
+        this.stampNodes[idx].setAlpha(showStamp ? 1 : 0)
       })
       this.seatNodes.forEach((node, i) =>
       {
         const has = players.some((p) => p.seat === i)
         node.box.setVisible(has)
+        if (!has)
+        {
+          this.scoreNodes[i].setAlpha(0)
+          this.stampNodes[i].setAlpha(0)
+        }
       })
     }
 
     /**
-     * 刷新底牌
+     * 刷新顶部三张地主牌
      * @param {Object} state 状态快照
      * @returns {void}
      */
@@ -795,40 +839,40 @@ export default function createDdzScene(Phaser, hooks)
       {
         return
       }
-      const reveal =
-        state.phase_code >= 3 || state.landlord === state.my_seat || state.phase_code >= 2
+      const reveal = state.phase_code >= 2 || state.landlord === state.my_seat
       cards.forEach((card, i) =>
       {
-        const c = drawCard(this, (i - 1) * 78, 0, card, reveal, 0.72)
+        const c = drawCard(this, (i - 1) * 48, 0, card, reveal, 0.44)
         this.bottomSlot.add(c)
       })
     }
 
     /**
-     * 刷新中央出牌区
+     * 刷新中央出牌区与叶形牌型标签
      * @param {Object} state 状态快照
      * @returns {void}
      */
     renderPlayed(state)
     {
       this.playSlot.removeAll(true)
+      this.patternSlot.removeAll(true)
       const cards = state.last_cards || []
       if (!cards.length)
       {
-        this.playLabel.setText('')
         return
       }
       const n = cards.length
-      const step = Math.min(CARD_W * 0.62, (W - 240) / Math.max(n, 1))
+      const step = Math.min(CARD_W * 0.7, (W - 260) / Math.max(n, 1))
       cards.forEach((card, i) =>
       {
         const offset = (i - (n - 1) / 2) * step
-        const c = drawCard(this, offset, 0, card, true, 0.86)
+        const c = drawCard(this, offset, 0, card, true, 0.94)
         this.playSlot.add(c)
       })
-      this.playLabel.setText(
-        (state.last_type || '') + (state.last_type ? ' · ' : '') + n + ' 张'
-      )
+      if (state.last_type)
+      {
+        this.patternSlot.add(drawPatternTag(this, 0, 0, state.last_type))
+      }
     }
 
     /**
@@ -848,14 +892,14 @@ export default function createDdzScene(Phaser, hooks)
         return
       }
       const n = cards.length
-      const maxSpan = W - 60
+      const maxSpan = W - 56
       const step = n > 1 ? Math.min(CARD_W * 0.62, (maxSpan - CARD_W) / (n - 1)) : 0
       const totalW = step * (n - 1) + CARD_W
       const startX = (W - totalW) / 2 + CARD_W / 2
       cards.forEach((card, i) =>
       {
         const x = startX + i * step
-        const node = drawCard(this, x, HAND_Y, card, true, 1)
+        const node = drawCard(this, x, HAND_Y, card, true, 1, false)
         node.setDepth(10 + i)
         node.setInteractive(
           new Phaser.Geom.Rectangle(-CARD_W / 2, -CARD_H / 2, CARD_W, CARD_H),
@@ -872,7 +916,7 @@ export default function createDdzScene(Phaser, hooks)
           else
           {
             this.selected.add(key)
-            node.y = HAND_Y - 28
+            node.y = HAND_Y - 30
           }
           this.selectedLabel.setText(this.selected.size ? '已选 ' + this.selected.size + ' 张' : '')
           if (hooks.onSelect)
@@ -919,23 +963,23 @@ export default function createDdzScene(Phaser, hooks)
       this.effectLayer.removeAll(true)
       const g = this.add.graphics()
       const rays = isBomb ? 14 : 8
-      g.fillStyle(0xffd45e, 0.85)
+      g.fillStyle(0xffd45e, 0.8)
       for (let i = 0; i < rays; i += 1)
       {
         const a = ((Math.PI * 2) / rays) * i
-        const len = isBomb ? 240 : 170
+        const len = isBomb ? 230 : 160
         g.fillTriangle(
           Math.cos(a) * len,
           Math.sin(a) * len,
-          Math.cos(a + 0.18) * 40,
-          Math.sin(a + 0.18) * 40,
-          Math.cos(a - 0.18) * 40,
-          Math.sin(a - 0.18) * 40
+          Math.cos(a + 0.18) * 38,
+          Math.sin(a + 0.18) * 38,
+          Math.cos(a - 0.18) * 38,
+          Math.sin(a - 0.18) * 38
         )
       }
       const glow = this.add.graphics()
-      glow.fillStyle(0xffb830, 0.55)
-      glow.fillCircle(0, 0, isBomb ? 130 : 96)
+      glow.fillStyle(0xffb830, 0.5)
+      glow.fillCircle(0, 0, isBomb ? 126 : 92)
       const txt = this.add
         .text(0, 0, type, {
           fontFamily: 'sans-serif',
@@ -944,7 +988,7 @@ export default function createDdzScene(Phaser, hooks)
           fontStyle: 'bold'
         })
         .setOrigin(0.5)
-        .setShadow(0, 4, '#8a3a00', 8)
+      txt.setStroke('#8a3a00', 8)
       this.effectLayer.add([g, glow, txt])
       this.effectLayer.setScale(0.6).setAlpha(1)
       this.tweens.add({
@@ -977,45 +1021,47 @@ export default function createDdzScene(Phaser, hooks)
       const my = (state.players || []).find((p) => p.seat === state.my_seat)
       const won = my ? my.score > 0 : false
       const box = this.add.container(W / 2, H / 2).setDepth(80)
-      const mask = this.add.rectangle(0, 0, W, H, 0x000000, 0.6).setInteractive()
+      const mask = this.add.rectangle(0, 0, W, H, 0x000000, 0.62).setInteractive()
       const g = this.add.graphics()
-      g.fillStyle(0x14301f, 1)
-      g.fillRoundedRect(-300, -220, 600, 440, 24)
-      g.lineStyle(4, 0xd8ae4e, 0.9)
-      g.strokeRoundedRect(-300, -220, 600, 440, 24)
+      g.fillStyle(0x4a0f09, 1)
+      g.fillRoundedRect(-300, -222, 600, 444, 24)
+      g.fillStyle(0x74220f, 1)
+      g.fillRoundedRect(-292, -214, 584, 428, 18)
+      g.lineStyle(4, COLOR.woodTrim, 0.95)
+      g.strokeRoundedRect(-292, -214, 584, 428, 18)
       const title = this.add
         .text(0, -150, won ? '胜利' : '失败', {
           fontFamily: 'sans-serif',
           fontSize: '76px',
-          color: won ? '#7dff9b' : '#ff7d7d',
+          color: won ? '#ffd45e' : '#ff8a7a',
           fontStyle: 'bold'
         })
         .setOrigin(0.5)
-        .setShadow(0, 4, '#000000aa', 8)
+      title.setStroke('#3a0c06', 8)
       const detail = this.add
         .text(
           0,
-          -40,
+          -30,
           '底分 ' +
             state.base_score +
-            '  倍数 x' +
+            '   倍数 x' +
             state.multiplier +
             '\n本局得分 ' +
             ((my && my.score) || 0),
           {
             fontFamily: 'sans-serif',
             fontSize: '30px',
-            color: '#e8f5e9',
+            color: '#ffe9c4',
             align: 'center',
-            lineSpacing: 12
+            lineSpacing: 14
           }
         )
         .setOrigin(0.5)
       const back = drawButton(this, {
         x: 0,
-        y: 140,
+        y: 148,
         w: 240,
-        h: 72,
+        h: 74,
         text: '返回大厅',
         fill: COLOR.btnPrimary,
         fontSize: 30
@@ -1049,7 +1095,7 @@ export default function createDdzScene(Phaser, hooks)
     }
 
     /**
-     * 每帧刷新房间号与时钟，保持与原版一致的常驻信息
+     * 每帧刷新时钟，保持与原版一致的常驻信息
      * @returns {void}
      */
     update()

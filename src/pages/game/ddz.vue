@@ -79,7 +79,7 @@ export default
           parent: 'ddz-canvas',
           width: 750,
           height: 1334,
-          backgroundColor: '#07291a',
+          backgroundColor: '#4a0f09',
           scale:
           {
             mode: Phaser.Scale.FIT,
@@ -107,6 +107,8 @@ export default
       net.on('state', (data) =>
       {
         data.my_coin = uni.getStorageSync('ddz_coin') || 12000;
+        const roomNames = { novice: '新手场 · 1/3', normal: '普通场 · 2/3', senior: '高级场 · 3/3' };
+        data.room_name = roomNames[uni.getStorageSync('ddz_room')] || '经典场 · 1/3';
         this.playStateSound(data);
         this.state = data;
         this.tips = '';
